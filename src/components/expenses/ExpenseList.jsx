@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Heading,
@@ -23,40 +23,40 @@ import {
   useColorModeValue,
   InputGroup,
   InputLeftElement,
-  Flex,
   Avatar,
   useDisclosure,
   Stat,
   StatLabel,
   StatNumber,
   SimpleGrid,
-  Divider,
+  Spinner,
+  Center,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 import {
   FiSearch,
-  FiFilter,
   FiMoreVertical,
   FiEdit2,
   FiTrash2,
   FiDownload,
-  FiCalendar,
-  FiDollarSign,
   FiShoppingCart,
   FiTruck,
   FiHome,
   FiHeart,
   FiBook,
+  FiDollarSign,
 } from 'react-icons/fi';
-import useExpenses from '../../hooks/useExpenses'; // ✅ Fixed: Changed from named import to default import
-import { formatCurrency, formatDate } from '../../utils/formatters';
+
+// Firebase imports
+import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../../config/firebase'; // Fixed path based on your structure
+
 import DeleteConfirmation from '../common/DeleteConfirmation';
-import EmptyState from '../common/EmptyState';// Vite will look for .js/.jsx/.ts/etc.
-
-
-
+import EmptyState from '../common/EmptyState';
 
 const categoryIcons = {
-  Food: FiShoppingCart,
+  'Food & Dining': FiShoppingCart,
   Transportation: FiTruck,
   Housing: FiHome,
   Healthcare: FiHeart,
@@ -65,7 +65,7 @@ const categoryIcons = {
 };
 
 const categoryColors = {
-  Food: 'green',
+  'Food & Dining': 'green',
   Transportation: 'blue',
   Housing: 'purple',
   Healthcare: 'red',
@@ -73,23 +73,88 @@ const categoryColors = {
   Other: 'gray',
 };
 
+// Utility functions (you might want to move these to a separate utils file)
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+  }).format(amount);
+};
+
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
 const ExpenseList = () => {
-  const { expenses, deleteExpense } = useExpenses();
+  // State for expenses and Firebase
+  const [expenses, setExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // UI state
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const [selectedExpense, setSelectedExpense] = React.useState(null);
-  const [searchTerm, setSearchTerm] = React.useState('');
-  const [categoryFilter, setCategoryFilter] = React.useState('');
-  const [sortBy, setSortBy] = React.useState('date');
-  const [sortOrder, setSortOrder] = React.useState('desc');
+  const [selectedExpense, setSelectedExpense] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('desc');
   
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const rowHoverBg = useColorModeValue('gray.50', 'gray.700');
 
+  // Replace with actual user ID from authentication
+  const userId = "demoUser123";
+
+  // Fetch expenses from Firestore
+  useEffect(() => {
+    const q = query(
+      collection(db, 'expenses'), 
+      where('userId', '==', userId)
+    );
+    
+    const unsubscribe = onSnapshot(q, 
+      (querySnapshot) => {
+        const expensesData = [];
+        querySnapshot.forEach((doc) => {
+          expensesData.push({
+            id: doc.id,
+            ...doc.data()
+          });
+        });
+        setExpenses(expensesData);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error fetching expenses:", err);
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [userId]);
+
+  // Delete expense from Firestore
+  const deleteExpense = async (expenseId) => {
+    try {
+      await deleteDoc(doc(db, 'expenses', expenseId));
+      console.log("Expense deleted successfully");
+    } catch (err) {
+      console.error("Error deleting expense:", err);
+      setError(err.message);
+    }
+  };
+
   // Filter and sort expenses
   const filteredExpenses = React.useMemo(() => {
     let filtered = expenses.filter(expense => {
-      const matchesSearch = expense.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = expense.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           expense.title?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = !categoryFilter || expense.category === categoryFilter;
       return matchesSearch && matchesCategory;
     });
@@ -106,10 +171,10 @@ const ExpenseList = () => {
           comparison = a.amount - b.amount;
           break;
         case 'description':
-          comparison = a.description.localeCompare(b.description);
+          comparison = (a.description || a.title || '').localeCompare(b.description || b.title || '');
           break;
         case 'category':
-          comparison = a.category.localeCompare(b.category);
+          comparison = (a.category || '').localeCompare(b.category || '');
           break;
         default:
           comparison = 0;
@@ -157,7 +222,29 @@ const ExpenseList = () => {
     }
   };
 
-  const categories = [...new Set(expenses.map(expense => expense.category))];
+  const categories = [...new Set(expenses.map(expense => expense.category).filter(Boolean))];
+
+  // Loading state
+  if (loading) {
+    return (
+      <Center h="400px">
+        <VStack>
+          <Spinner size="xl" color="blue.500" />
+          <Text>Loading your expenses...</Text>
+        </VStack>
+      </Center>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Alert status="error">
+        <AlertIcon />
+        Error loading expenses: {error}
+      </Alert>
+    );
+  }
 
   return (
     <>
@@ -320,7 +407,7 @@ const ExpenseList = () => {
                 ? "Try adjusting your search or filter criteria"
                 : "Start by adding your first expense"
               }
-              actionLabel="Add Expense" // ✅ Fixed: Changed from actionText to actionLabel
+              actionLabel="Add Expense"
               onAction={() => {/* Navigate to add expense */}}
             />
           ) : (
@@ -374,7 +461,16 @@ const ExpenseList = () => {
                             color={`${colorScheme}.600`}
                             icon={<IconComponent size="16" />}
                           />
-                          <Text fontWeight="medium">{expense.description}</Text>
+                          <VStack align="start" spacing={0}>
+                            <Text fontWeight="medium">
+                              {expense.title || expense.description}
+                            </Text>
+                            {expense.description && expense.title && (
+                              <Text fontSize="sm" color="gray.500">
+                                {expense.description}
+                              </Text>
+                            )}
+                          </VStack>
                         </HStack>
                       </Td>
                       <Td>
@@ -428,7 +524,7 @@ const ExpenseList = () => {
         onClose={onClose}
         onConfirm={confirmDelete}
         title="Delete Expense"
-        message={`Are you sure you want to delete "${selectedExpense?.description}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${selectedExpense?.title || selectedExpense?.description}"? This action cannot be undone.`}
       />
     </>
   );

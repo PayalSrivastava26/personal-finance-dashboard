@@ -44,7 +44,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       <VStack align="stretch" spacing={2}>
         <Box mb={8}>
           <Heading size="lg" color="brand.500" textAlign="center">
-            💰 FinNest
+            💰 FinTrack 
           </Heading>
         </Box>
         
