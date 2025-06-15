@@ -1,4 +1,3 @@
-// src/components/layout/Layout.jsx
 import React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
 import Sidebar from './Sidebar'

@@ -1,4 +1,3 @@
-// src/components/ui/ThemeToggle.jsx
 import React from 'react'
 import { IconButton, useColorMode, useColorModeValue } from '@chakra-ui/react'
 import { FiSun, FiMoon } from 'react-icons/fi'  // Changed to Feather icons
